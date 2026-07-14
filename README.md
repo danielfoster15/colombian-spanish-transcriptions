@@ -2,6 +2,56 @@
 
 How to use OpenAIs Whisper to transcribe and diarize audio files
 
+## Quick start
+
+This repo is an installable package built on [WhisperX](https://github.com/m-bain/whisperX)
+(faster-whisper transcription + wav2vec2 word alignment + pyannote diarization).
+
+```bash
+pip install -e .
+# ffmpeg must be on your PATH (e.g. apt install ffmpeg)
+
+# Diarization needs a HuggingFace token with access to the gated
+# pyannote/speaker-diarization-community-1 model:
+# https://huggingface.co/settings/tokens (accept the model's terms first)
+export HF_TOKEN=hf_your_token_here
+```
+
+### Commands
+
+| Command | Purpose |
+|---|---|
+| `wd-pipeline` | End-to-end: download → transcribe → align → diarize → speaker-labeled JSON/SRT/TXT/HTML |
+| `wd-diarize` | Diarization only: who speaks when, as TSV + RTTM |
+| `wd-highlight` | Highlight 2nd-person-singular (voseo/tuteo) verb forms in HTML transcripts with spaCy |
+
+```bash
+# One YouTube video, Spanish, two speakers -> outputs/<id>_transcript.html etc.
+wd-pipeline --ids fkxVtGHE6V4 --language es --num-speakers 2
+
+# Batch: every video listed in video_links.txt (one URL or id per line)
+wd-pipeline --urls-file video_links.txt --outdir outputs/
+
+# Local audio file, transcription only (no HF token needed)
+wd-pipeline --files interview.wav --no-diarize
+
+# Diarize only
+wd-diarize --ids fkxVtGHE6V4 --num-speakers 2
+
+# Highlight voseo forms in transcripts placed in <dir>/original/
+wd-highlight --dir my_transcripts --spacy-model es_dep_news_trf
+```
+
+Useful `wd-pipeline` flags: `--model` (default `large-v3`; use `small` for quick runs),
+`--device cuda|cpu` (auto-detected), `--batch-size`, `--min-speakers`/`--max-speakers`.
+
+Downloaded audio and generated transcripts are written to git-ignored output
+directories — the repository only tracks code and docs. Previously generated
+data lives on `/mnt/storage/whisper-diarization-data/`.
+
+The tutorial below and `transcription_diarization.ipynb` describe the original
+manual notebook workflow this package replaced; they are kept for reference.
+
 ## What is Whisper?
 
 Whisper is an State-of-the-Art speech recognition system from OpenAI that has been trained on 680,000 hours 
@@ -232,7 +282,7 @@ print(*captions[:8], sep='\n')
 
 ### Matching the Transcriptions and the Diarizations
 
-Next, we will match each transcribtion line to some diarizations, and display everything by
+Next, we will match each transcription line to some diarizations, and display everything by
 generating a HTML file. To get the correct timing, we should take care of the parts in original 
 audio that were in no diarization segment. We append a new div for each segment in our audio.
 

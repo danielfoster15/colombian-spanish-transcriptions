@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "whisper-diarization"
+version = "1.0.0"
+description = "Transcribe and diarize YouTube videos with WhisperX, producing speaker-labeled transcripts."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "whisperx>=3.8",
+    "yt-dlp",
+    "pydub",
+    "webvtt-py",
+    "beautifulsoup4",
+    "spacy",
+]
+
+[project.scripts]
+wd-pipeline = "whisper_diarization.pipeline:main"
+wd-diarize = "whisper_diarization.diarize:main"
+wd-highlight = "whisper_diarization.postprocess:main"
+
+[tool.setuptools.packages.find]
+include = ["whisper_diarization*"]

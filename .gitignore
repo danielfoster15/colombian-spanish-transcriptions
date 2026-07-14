@@ -1,0 +1,42 @@
+# Audio and video
+*.wav
+*.mp3
+*.mp4
+*.m4a
+*.webm
+
+# Generated transcripts and diarization output
+*.srt
+*.tsv
+*.vtt
+*.json
+dz.*
+diarization.txt
+transcript*.html
+outputs/
+data/
+diarizations/
+transcripts/
+segments/
+htmls/
+vos_podes*/
+madre_selva*/
+madre_selva_improved_transcripts.zip
+
+# Vendored binaries / installers
+ffmpeg-master-latest-linux64-gpl/
+*.deb
+*.tar.xz
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Secrets
+.env
