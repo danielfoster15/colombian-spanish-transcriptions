@@ -47,8 +47,26 @@ wd-highlight --dir my_transcripts --spacy-model es_dep_news_trf
 ```
 
 Useful `wd-pipeline` flags: `--model` (default `large-v3`; use `small` for quick
-runs), `--device cuda|cpu` (auto-detected), `--batch-size`, and
-`--min-speakers` / `--max-speakers` when the exact speaker count is unknown.
+runs), `--device cuda|cpu` (auto-detected), `--batch-size`,
+`--min-speakers` / `--max-speakers` when the exact speaker count is unknown, and
+`--html-style` (`speaker`, `classic`, or `auto`).
+
+### Reproducing the "classic" voseo transcripts
+
+The original workflow for this project produced clickable HTML transcripts with
+no speaker labels, then highlighted informal 2nd-person forms (voseo/tuteo). To
+regenerate that from already-downloaded audio (filenames that are YouTube ids
+get a working player link automatically):
+
+```bash
+# 1. Transcribe -> classic HTML (auto-selected because --no-diarize means no speakers)
+wd-pipeline --files /path/to/audio/*.wav --language es --no-diarize --outdir outputs/show
+
+# 2. Highlight voseo forms
+mkdir -p outputs/show_hl/original && cp outputs/show/*_transcript.html outputs/show_hl/original/
+wd-highlight --dir outputs/show_hl
+# -> outputs/show_hl/modified/*.html
+```
 
 ## Output
 

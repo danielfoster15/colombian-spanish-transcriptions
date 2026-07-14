@@ -12,11 +12,14 @@ This replaces the tutorial notebook. Typical use:
 import argparse
 import gc
 import os
+import re
 
 import torch
 
 from .output import write_all
 from .utils import get_hf_token, read_video_ids
+
+YT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
 
 def parse_args():
@@ -37,6 +40,10 @@ def parse_args():
     parser.add_argument("--compute-type", default=None,
                         help="ctranslate2 compute type (default: float16 on cuda, int8 on cpu).")
     parser.add_argument("--batch-size", type=int, default=8, help="Transcription batch size.")
+    parser.add_argument("--html-style", choices=["auto", "speaker", "classic"], default="auto",
+                        help="HTML layout: 'speaker' labels, 'classic' original layout "
+                             "(no speakers, feeds wd-highlight), or 'auto' (default: classic "
+                             "when not diarizing, speaker when diarizing).")
 
     dia = parser.add_argument_group("diarization")
     dia.add_argument("--no-diarize", action="store_true", help="Transcription only, no speakers.")
@@ -73,7 +80,10 @@ def main():
         jobs.append((wav_path, video_id, title, video_id))
     for path in args.files:
         stem = os.path.splitext(os.path.basename(path))[0]
-        jobs.append((path, stem, stem, None))
+        # If a local file is named after its YouTube id (e.g. 0RJMxQOi2zQ.wav),
+        # reuse it so the HTML player links back to the video without downloading.
+        video_id = stem if YT_ID_RE.match(stem) else None
+        jobs.append((path, stem, stem, video_id))
 
     for audio_path, stem, title, video_id in jobs:
         process_one(audio_path, stem, title, video_id, model, device, hf_token, args)
@@ -119,7 +129,8 @@ def process_one(audio_path, stem, title, video_id, model, device, hf_token, args
         if device == "cuda":
             torch.cuda.empty_cache()
 
-    paths = write_all(result["segments"], args.outdir, stem, title, video_id)
+    paths = write_all(result["segments"], args.outdir, stem, title, video_id,
+                      html_style=args.html_style)
     print("wrote:\n  " + "\n  ".join(paths))
 
 

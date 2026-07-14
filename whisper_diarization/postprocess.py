@@ -44,14 +44,16 @@ def process_transcript(path, nlp):
     divs = soup.find_all("div", class_="t") or soup.find_all("span", class_="t")
     for i, div in enumerate(divs, start=1):
         doc = nlp(div.text)
-        tokens = []
+        parts = []
         for token in doc:
+            # token.whitespace_ preserves the original spacing that followed the
+            # token, so punctuation stays attached ("Parce, ya." not "Parce , ya .").
             if "Person=2" in token.morph and "Number=Sing" in token.morph:
-                tokens.append(f"<mark>{token.text}</mark>")
+                parts.append(f"<mark>{token.text}</mark>{token.whitespace_}")
             else:
-                tokens.append(token.text)
+                parts.append(token.text_with_ws)
         div.clear()
-        div.append(BeautifulSoup(" ".join(tokens), "html.parser"))
+        div.append(BeautifulSoup("".join(parts), "html.parser"))
         print(f"processed line {i} of {len(divs)} in {path}")
 
     style_tag = soup.new_tag("style")

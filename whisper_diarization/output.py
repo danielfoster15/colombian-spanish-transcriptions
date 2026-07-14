@@ -1,4 +1,11 @@
-"""Writers for the pipeline result: JSON, SRT, TXT, and a clickable speaker-labeled HTML page."""
+"""Writers for the pipeline result: JSON, SRT, TXT, and clickable HTML pages.
+
+Two HTML styles are available:
+- "speaker": one line per segment prefixed with a colored speaker label
+- "classic": the original create_transcript.py layout (.c/.l/.s/.t divs with a
+  setCurrentTime() player), no speaker labels — the format the wd-highlight
+  voseo highlighter consumes.
+"""
 
 import html
 import json
@@ -45,6 +52,51 @@ PLAYER_SNIPPET = """  <div id="player"></div>
 HTML_FOOTER = "</body>\n</html>\n"
 
 
+CLASSIC_HEADER = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{title}</title>
+  <style>
+    body {{ font-family: sans-serif; font-size: 18px; color: #111; padding: 0 0 1em 0; }}
+    .l {{ color: #050; }}
+    .s {{ display: inline-block; }}
+    .t {{ display: inline-block; }}
+    #player {{ position: sticky; top: 20px; float: right; }}
+  </style>
+</head>
+<body>
+  <h2>{title}</h2>
+{player}"""
+
+CLASSIC_PLAYER = """  <div id="player"></div>
+  <script>
+    var tag = document.createElement('script');
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.getElementsByTagName('script')[0].parentNode.insertBefore(tag, document.getElementsByTagName('script')[0]);
+    var player;
+    function onYouTubeIframeAPIReady() {{
+      player = new YT.Player('player', {{ height: '210', width: '340', videoId: '{video_id}' }});
+    }}
+    function setCurrentTime(t) {{ player.seekTo(t); player.playVideo(); }}
+  </script><br>
+"""
+
+
+def classic_timestamp(seconds):
+    """Seconds -> 'HH:MM:SS.ss' as the original create_transcript.py rendered it."""
+    seconds = max(seconds, 0)
+    return "{:02d}:{:02d}:{:05.2f}".format(
+        int(seconds // 3600), int(seconds % 3600 // 60), seconds % 60
+    )
+
+
+def has_speakers(segments):
+    """True if diarization assigned at least one real speaker."""
+    return any(seg.get("speaker") for seg in segments)
+
+
 def speaker_labels(segments):
     """Map raw pyannote labels (SPEAKER_00, ...) to stable display names and colors."""
     order = []
@@ -65,18 +117,49 @@ def write_json(segments, path):
 
 
 def write_srt(segments, path, labels):
+    speakers = labels is not None
     with open(path, "w", encoding="utf-8") as f:
         for i, seg in enumerate(segments, start=1):
-            name = labels[seg.get("speaker", "UNKNOWN")][0]
+            prefix = f"[{labels[seg.get('speaker', 'UNKNOWN')][0]}] " if speakers else ""
             f.write(f"{i}\n{srt_timestamp(seg['start'])} --> {srt_timestamp(seg['end'])}\n")
-            f.write(f"[{name}] {seg['text'].strip()}\n\n")
+            f.write(f"{prefix}{seg['text'].strip()}\n\n")
 
 
 def write_txt(segments, path, labels):
+    speakers = labels is not None
     with open(path, "w", encoding="utf-8") as f:
         for seg in segments:
-            name = labels[seg.get("speaker", "UNKNOWN")][0]
-            f.write(f"[{format_timestamp(seg['start'])}] {name}: {seg['text'].strip()}\n")
+            stamp = format_timestamp(seg["start"])
+            prefix = f"{labels[seg.get('speaker', 'UNKNOWN')][0]}: " if speakers else ""
+            f.write(f"[{stamp}] {prefix}{seg['text'].strip()}\n")
+
+
+def write_classic_html(segments, path, title, video_id=None):
+    """Reproduce the original create_transcript.py layout (no speaker labels).
+
+    Emits <div class="t"> lines that the wd-highlight voseo highlighter consumes.
+    With a video_id the timestamps seek an embedded YouTube player.
+    """
+    player = CLASSIC_PLAYER.format(video_id=video_id) if video_id else ""
+    parts = [CLASSIC_HEADER.format(title=html.escape(title), player=player)]
+    for seg in segments:
+        stamp = classic_timestamp(seg["start"])
+        secs = int(seg["start"])
+        text = html.escape(seg["text"].strip())
+        if video_id:
+            link = f'<a href="javascript:void(0);" onclick="setCurrentTime({secs})">{stamp}</a>'
+        else:
+            link = stamp
+        parts.append(
+            '  <div class="c">\n'
+            f'    <a class="l" href="#{stamp}" id="{stamp}">link</a> |\n'
+            f'    <div class="s">{link}</div>\n'
+            f'    <div class="t">{text}</div>\n'
+            "  </div>\n"
+        )
+    parts.append(HTML_FOOTER)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("".join(parts))
 
 
 def write_html(segments, path, labels, title, video_id=None):
@@ -108,9 +191,17 @@ def write_html(segments, path, labels, title, video_id=None):
         f.write("".join(parts))
 
 
-def write_all(segments, outdir, stem, title, video_id=None):
-    """Write JSON/SRT/TXT/HTML for one video. Returns the list of paths written."""
-    labels = speaker_labels(segments)
+def write_all(segments, outdir, stem, title, video_id=None, html_style="auto"):
+    """Write JSON/SRT/TXT/HTML for one video. Returns the list of paths written.
+
+    html_style: "speaker" (colored speaker labels), "classic" (original layout,
+    no speakers), or "auto" (classic when no speakers were assigned).
+    """
+    speakers = has_speakers(segments)
+    if html_style == "auto":
+        html_style = "speaker" if speakers else "classic"
+    labels = speaker_labels(segments) if speakers else None
+
     paths = {
         "json": os.path.join(outdir, f"{stem}.json"),
         "srt": os.path.join(outdir, f"{stem}.srt"),
@@ -120,5 +211,8 @@ def write_all(segments, outdir, stem, title, video_id=None):
     write_json(segments, paths["json"])
     write_srt(segments, paths["srt"], labels)
     write_txt(segments, paths["txt"], labels)
-    write_html(segments, paths["html"], labels, title, video_id)
+    if html_style == "classic":
+        write_classic_html(segments, paths["html"], title, video_id)
+    else:
+        write_html(segments, paths["html"], speaker_labels(segments), title, video_id)
     return list(paths.values())
